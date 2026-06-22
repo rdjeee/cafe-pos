@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { X, Banknote, QrCode, CheckCircle } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
-import { useOrderStore } from '@/store/useOrderStore';
+import { useOrderStore, Order } from '@/store/useOrderStore';
 import { useCashierStore } from '@/store/useCashierStore';
 import { useShiftStore } from '@/store/useShiftStore';
+import Receipt from './Receipt';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -20,10 +21,12 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
   const [cashAmount, setCashAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [lastOrder, setLastOrder] = useState<Order | null>(null);
+  
   const { addOrder } = useOrderStore();
-  const activeCashier = useCashierStore(state => state.getActiveCashier());
+  const { getActiveCashier } = useCashierStore();
   const { getCurrentShift } = useShiftStore();
-  const currentShift = getCurrentShift();
 
   if (!isOpen) return null;
 
@@ -38,21 +41,20 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
   const handlePayment = () => {
   if (!selectedMethod) return;
   if (selectedMethod === 'cash' && Number(cashAmount) < total) return;
-  
+
   setIsProcessing(true);
   
-  // Simulasi proses pembayaran
   setTimeout(() => {
-    // Generate order number
     const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
+    const activeCashier = getActiveCashier();
+    const currentShift = getCurrentShift();
     
-    // Create order object
-    const newOrder: import('@/store/useOrderStore').Order = {
+    const newOrder: Order = {
       id: `order-${Date.now()}`,
       order_number: orderNumber,
       customer_name: customerName,
-      cashier_name: activeCashier?.name || 'Tidak Diketahui', // ← TAMBAHKAN INI
-      shift_id: currentShift?.id || 'unknown', // ← TAMBAHKAN INI
+      cashier_name: activeCashier?.name || 'Tidak Diketahui',
+      shift_id: currentShift?.id || 'unknown',
       table_number: tableNumber,
       order_type: orderType,
       items: items.map(item => ({
@@ -64,25 +66,25 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
         subtotal: item.price * item.quantity,
       })),
       subtotal: total,
-      tax: 0, // Bisa ditambah jika ada pajak
+      tax: 0,
       total: total,
       payment_method: selectedMethod,
       payment_amount: selectedMethod === 'cash' ? Number(cashAmount) : total,
       change: selectedMethod === 'cash' ? Number(cashAmount) - total : 0,
-      status: 'processing',
+      payment_status: 'confirmed', // Langsung confirmed karena pembayaran di kasir
+      status: 'processing', // Langsung processing untuk order dari kasir
       created_at: new Date(),
     };
 
-    // Save to order store
     addOrder(newOrder);
+    setLastOrder(newOrder); // Simpan untuk struk
 
     setIsProcessing(false);
     setIsSuccess(true);
     
-    // Reset setelah 2 detik
     setTimeout(() => {
       clearCart();
-      onClose();
+      setShowReceipt(true); // Tampilkan struk
       setIsSuccess(false);
       setSelectedMethod(null);
       setCashAmount('');
@@ -93,8 +95,10 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
   const quickCashAmounts = [50000, 100000, 150000, 200000];
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white z-10">
           <h2 className="text-lg font-bold text-gray-800">Pembayaran</h2>
@@ -292,5 +296,34 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
         )}
       </div>
     </div>
+      )}
+
+      {/* Receipt Modal */}
+      {showReceipt && lastOrder && (
+        <Receipt
+          order={lastOrder}
+          onClose={() => {
+            setShowReceipt(false);
+            setLastOrder(null);
+            onClose();
+          }}
+          onPrint={() => {
+            const receiptContent = document.getElementById('receipt-content');
+            if (receiptContent) {
+              const printWindow = window.open('', '', 'width=300,height=600');
+              if (printWindow) {
+                printWindow.document.write('<html><head><title>Cetak Struk</title>');
+                printWindow.document.write('<style>body{font-family:monospace;font-size:12px;margin:0;padding:10px;}</style>');
+                printWindow.document.write('</head><body>');
+                printWindow.document.write(receiptContent.innerHTML);
+                printWindow.document.write('</body></html>');
+                printWindow.document.close();
+                printWindow.print();
+              }
+            }
+          }}
+        />
+      )}
+    </>
   );
 }

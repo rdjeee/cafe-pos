@@ -5,8 +5,10 @@ import { Minus, Plus, Trash2, ShoppingBag, UtensilsCrossed, User, AlertCircle, L
 import { useCartStore } from '@/store/useCartStore';
 import { useCashierStore } from '@/store/useCashierStore';
 import { useShiftStore } from '@/store/useShiftStore';
-import { tables } from '@/data/mockData';
+import { useTableStore } from '@/store/useTableStore';
 import PaymentModal from './PaymentModal';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { Wifi } from 'lucide-react';
 
 export default function CartPanel() {
   const [showManualInput, setShowManualInput] = useState(false);
@@ -20,6 +22,7 @@ export default function CartPanel() {
 
   const { getActiveCashiers, activeCashierId, setActiveCashier, getActiveCashier } = useCashierStore();
   const { isShiftOpen, currentShift } = useShiftStore();
+  const { tables } = useTableStore();
 
   const formatRupiah = (number: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
@@ -48,18 +51,70 @@ export default function CartPanel() {
       setIsPaymentModalOpen(true);
     }
   };
+  const { wifiSSID, wifiPassword, setWifiSSID, setWifiPassword } = useSettingsStore();
+  const [showWifiInput, setShowWifiInput] = useState(false);
 
   return (
-    <div className="w-full md:w-[400px] lg:w-[420px] bg-white border-l border-gray-200 flex flex-col h-screen max-h-screen shadow-lg overflow-hidden">
-      {/* Header & Order Type - SCROLLABLE */}
-      <div className="p-4 border-b border-gray-100 flex-shrink-0 overflow-y-auto max-h-[45vh]">
+    <div className="w-full md:w-[400px] lg:w-[420px] bg-white border-l border-gray-200 flex flex-col h-full max-h-full shadow-lg overflow-hidden">
+      {/* Header & Order Type - SCROLLABLE jika konten panjang */}
+      <div className="p-4 border-b border-gray-100 flex-shrink-0 overflow-y-auto" style={{ maxHeight: '40vh' }}>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Pesanan Baru</h2>
+        {/* WiFi Info Section */}
+<div className="p-3 border-b border-gray-100">
+  <div className="flex items-center justify-between mb-2">
+    <label className="text-xs font-medium text-gray-700 flex items-center gap-1">
+      <Wifi className="w-3.5 h-3.5" />
+      Info WiFi Pelanggan
+    </label>
+    <button
+      onClick={() => setShowWifiInput(!showWifiInput)}
+      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+    >
+      {showWifiInput ? 'Sembunyikan' : 'Edit'}
+    </button>
+  </div>
+
+  {showWifiInput ? (
+    <div className="space-y-2">
+      <div>
+        <input
+          type="text"
+          value={wifiSSID}
+          onChange={(e) => setWifiSSID(e.target.value)}
+          placeholder="SSID WiFi (nama jaringan)"
+          className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+        />
+      </div>
+      <div>
+        <input
+          type="text"
+          value={wifiPassword}
+          onChange={(e) => setWifiPassword(e.target.value)}
+          placeholder="Password WiFi"
+          className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+        />
+      </div>
+    </div>
+  ) : (
+    <div className="text-xs text-gray-600">
+      {wifiSSID ? (
+        <div className="space-y-0.5">
+          <p><span className="font-medium">SSID:</span> {wifiSSID}</p>
+          {wifiPassword && <p><span className="font-medium">Pass:</span> {wifiPassword}</p>}
+        </div>
+      ) : (
+        <p className="text-gray-400 italic">Klik "Edit" untuk input info WiFi</p>
+      )}
+    </div>
+  )}
+</div>
         
         {/* Info Kasir - LOCKED saat shift aktif */}
         <div className="mb-3">
           <label className="text-xs font-medium text-gray-600 mb-1 block">
             Kasir Bertugas {isShiftOpen() && <span className="text-green-600">(Terkunci)</span>}
           </label>
+          <div className="p-3 bg-green-50 border-t border-green-200"></div>
           
           {isShiftOpen() ? (
             <div className="w-full px-3 py-2 bg-green-50 border-2 border-green-300 rounded-lg flex items-center gap-2">

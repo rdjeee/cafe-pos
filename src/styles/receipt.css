@@ -1,0 +1,58 @@
+/* Print Styles untuk Thermal Printer */
+@media print {
+  /* Sembunyikan semua kecuali struk */
+  body * {
+    visibility: hidden;
+  }
+  
+  #receipt-content,
+  #receipt-content * {
+    visibility: visible;
+  }
+  
+  #receipt-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm; /* Untuk printer 80mm */
+    /* width: 58mm; */ /* Untuk printer 58mm, uncomment baris ini */
+    margin: 0;
+    padding: 5mm;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  
+  /* Hilangkan margin & padding default browser */
+  @page {
+    margin: 0;
+    size: 80mm auto; /* Sesuaikan dengan lebar printer */
+  }
+  
+  /* Hilangkan header & footer browser */
+  body {
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Screen preview styles */
+#receipt-content {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #000;
+}
+
+#receipt-content h1 {
+  font-size: 16px;
+  margin: 0;
+}
+
+#receipt-content p {
+  margin: 2px 0;
+}
+
+#receipt-content .border-dashed {
+  border-top: 1px dashed #666;
+}

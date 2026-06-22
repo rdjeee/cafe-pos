@@ -24,16 +24,19 @@ export interface Order {
   payment_method: 'cash' | 'qris';
   payment_amount?: number;
   change?: number;
-  status: 'processing' | 'completed' | 'cancelled';
-  created_at: Date;
-  completed_at?: Date;
+  payment_status: 'pending' | 'paid' | 'confirmed'; // Status pembayaran
+  status: 'pending_confirmation' | 'pending_payment' | 'processing' | 'completed' | 'cancelled';
+  created_at: Date | string; // Allow both Date and string from localStorage
+  completed_at?: Date | string;
 }
 
 interface OrderState {
   orders: Order[];
   addOrder: (order: Order) => void;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
+  confirmOrder: (orderId: string, paymentAmount?: number) => void; // New function
   getProcessingOrders: () => Order[];
+  getPendingOrders: () => Order[]; // New function
   getCompletedOrders: () => Order[];
   getOrderById: (orderId: string) => Order | undefined;
 }
@@ -59,6 +62,30 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     });
   },
 
+  confirmOrder: (orderId, paymentAmount) => {
+    set({
+      orders: get().orders.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              status: 'processing',
+              payment_status: 'confirmed',
+              payment_amount: paymentAmount || order.payment_amount,
+              change: paymentAmount 
+                ? paymentAmount - order.total 
+                : order.change,
+            }
+          : order
+      ),
+    });
+  },
+
+  getPendingOrders: () => {
+    return get().orders.filter(
+      (order) => order.status === 'pending_confirmation' || order.status === 'pending_payment'
+    );
+  },
+
   getProcessingOrders: () => {
     return get().orders.filter(
       (order) => order.status === 'processing'
@@ -68,7 +95,12 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   getCompletedOrders: () => {
     return get().orders
       .filter((order) => order.status === 'completed')
-      .sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+      .sort((a, b) => {
+        // Handle both Date objects and strings
+        const dateA = typeof a.created_at === 'string' ? new Date(a.created_at) : a.created_at;
+        const dateB = typeof b.created_at === 'string' ? new Date(b.created_at) : b.created_at;
+        return dateB.getTime() - dateA.getTime();
+      });
   },
 
   getOrderById: (orderId) => {

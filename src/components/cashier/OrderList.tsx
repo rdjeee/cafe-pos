@@ -6,43 +6,56 @@ import {
   CheckCircle2, 
   Package, 
   Search, 
-  Receipt,
+  Receipt as ReceiptIcon,
   User,
   MapPin,
-  Wallet,
   X,
   UtensilsCrossed,
-  ShoppingBag
+  ShoppingBag,
+  Printer
 } from 'lucide-react';
 import { useOrderStore, Order } from '@/store/useOrderStore';
+import Receipt from './Receipt';
 
-type TabType = 'processing' | 'completed';
+type TabType = 'pending' | 'processing' | 'completed';
 
 export default function OrderList() {
-  const [activeTab, setActiveTab] = useState<TabType>('processing');
+  const [activeTab, setActiveTab] = useState<TabType>('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   
   const { 
     getProcessingOrders, 
+    getPendingOrders,
     getCompletedOrders, 
     updateOrderStatus,
+    confirmOrder,
   } = useOrderStore();
 
+  const pendingOrders = getPendingOrders();
   const processingOrders = getProcessingOrders();
   const completedOrders = getCompletedOrders();
+  const [pendingQRCount, setPendingQRCount] = useState(0);
 
   const formatRupiah = (number: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    
+    // Check if date is valid
+    if (isNaN(dateObj.getTime())) {
+      return 'Invalid date';
+    }
+    
     return new Intl.DateTimeFormat('id-ID', {
       hour: '2-digit',
       minute: '2-digit',
       day: '2-digit',
       month: 'short',
-    }).format(date);
+    }).format(dateObj);
   };
 
   const handleCompleteOrder = (orderId: string) => {
@@ -50,7 +63,17 @@ export default function OrderList() {
     setSelectedOrder(null);
   };
 
-  const filteredOrders = activeTab === 'processing'
+  const handleConfirmOrder = (orderId: string, paymentAmount?: number) => {
+    confirmOrder(orderId, paymentAmount);
+    setSelectedOrder(null);
+  };
+
+  const filteredOrders = activeTab === 'pending'
+    ? pendingOrders.filter(order => 
+        order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        order.customer_name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : activeTab === 'processing'
     ? processingOrders.filter(order => 
         order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.customer_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -69,6 +92,17 @@ export default function OrderList() {
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
           <button
+            onClick={() => setActiveTab('pending')}
+            className={`flex-1 py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
+              activeTab === 'pending'
+                ? 'bg-amber-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Clock className="w-5 h-5" />
+            Menunggu ({pendingOrders.length})
+          </button>
+          <button
             onClick={() => setActiveTab('processing')}
             className={`flex-1 py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
               activeTab === 'processing'
@@ -76,7 +110,7 @@ export default function OrderList() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            <Clock className="w-5 h-5" />
+            <Package className="w-5 h-5" />
             Diproses ({processingOrders.length})
           </button>
           <button
@@ -109,14 +143,19 @@ export default function OrderList() {
       <div className="flex-1 overflow-y-auto p-4">
         {filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-            {activeTab === 'processing' ? (
+            {activeTab === 'pending' ? (
+              <>
+                <Clock className="w-16 h-16 mb-2 opacity-50" />
+                <p className="text-sm">Belum ada pesanan yang menunggu</p>
+              </>
+            ) : activeTab === 'processing' ? (
               <>
                 <Package className="w-16 h-16 mb-2 opacity-50" />
                 <p className="text-sm">Belum ada pesanan yang diproses</p>
               </>
             ) : (
               <>
-                <Receipt className="w-16 h-16 mb-2 opacity-50" />
+                <ReceiptIcon className="w-16 h-16 mb-2 opacity-50" />
                 <p className="text-sm">Belum ada riwayat pesanan</p>
               </>
             )}
@@ -148,9 +187,19 @@ export default function OrderList() {
                         </span>
                       )}
 
-                      {/* Badge Status */}
-                      {activeTab === 'processing' && (
+                      {/* Badge Status Order */}
+                      {order.status === 'pending_confirmation' && (
                         <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                          Menunggu Konfirmasi
+                        </span>
+                      )}
+                      {order.status === 'pending_payment' && (
+                        <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                          Menunggu Pembayaran
+                        </span>
+                      )}
+                      {activeTab === 'processing' && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
                           Diproses
                         </span>
                       )}
@@ -215,9 +264,35 @@ export default function OrderList() {
         <OrderDetailModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
+          onConfirm={(paymentAmount) => handleConfirmOrder(selectedOrder.id, paymentAmount)}
           onComplete={activeTab === 'processing' ? () => handleCompleteOrder(selectedOrder.id) : undefined}
+          onPrintOrder={(order) => setPrintOrder(order)}
           formatRupiah={formatRupiah}
           formatTime={formatTime}
+          isPending={activeTab === 'pending'}
+        />
+      )}
+
+      {/* Receipt Modal */}
+      {printOrder && (
+        <Receipt
+          order={printOrder}
+          onClose={() => setPrintOrder(null)}
+          onPrint={() => {
+            const receiptContent = document.getElementById('receipt-content');
+            if (receiptContent) {
+              const printWindow = window.open('', '', 'width=300,height=600');
+              if (printWindow) {
+                printWindow.document.write('<html><head><title>Cetak Struk</title>');
+                printWindow.document.write('<style>body{font-family:monospace;font-size:12px;margin:0;padding:10px;}</style>');
+                printWindow.document.write('</head><body>');
+                printWindow.document.write(receiptContent.innerHTML);
+                printWindow.document.write('</body></html>');
+                printWindow.document.close();
+                printWindow.print();
+              }
+            }
+          }}
         />
       )}
     </div>
@@ -228,12 +303,16 @@ export default function OrderList() {
 interface OrderDetailModalProps {
   order: Order;
   onClose: () => void;
+  onConfirm?: (paymentAmount?: number) => void; // New
   onComplete?: () => void;
+  onPrintOrder: (order: Order) => void;
   formatRupiah: (num: number) => string;
-  formatTime: (date: Date) => string;
+  formatTime: (date: Date | string) => string;
+  isPending?: boolean; // New
 }
 
-function OrderDetailModal({ order, onClose, onComplete, formatRupiah, formatTime }: OrderDetailModalProps) {
+function OrderDetailModal({ order, onClose, onConfirm, onComplete, onPrintOrder, formatRupiah, formatTime, isPending }: OrderDetailModalProps) {
+  const [paymentAmount, setPaymentAmount] = useState(order.total.toString());
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -338,8 +417,57 @@ function OrderDetailModal({ order, onClose, onComplete, formatRupiah, formatTime
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50 sticky bottom-0">
-          {onComplete ? (
+        <div className="p-4 border-t border-gray-200 bg-gray-50 sticky bottom-0 space-y-2">
+          {/* Jika pending & bayar di kasir - Input jumlah uang */}
+          {isPending && order.payment_method === 'cash' && (
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Jumlah Uang Diterima
+              </label>
+              <input
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="Masukkan jumlah uang"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              {Number(paymentAmount) >= order.total && (
+                <p className="text-sm text-green-600 mt-1">
+                  Kembalian: {formatRupiah(Number(paymentAmount) - order.total)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Status info untuk pending QRIS */}
+          {isPending && order.payment_method === 'qris' && order.status === 'pending_payment' && (
+            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                ⏳ Menunggu pembayaran QRIS dari pelanggan
+              </p>
+            </div>
+          )}
+
+          {/* Tombol Konfirmasi untuk pending orders */}
+          {onConfirm && isPending && (
+            <button
+              onClick={() => {
+                if (order.payment_method === 'cash' && Number(paymentAmount) < order.total) {
+                  alert('Jumlah uang tidak cukup!');
+                  return;
+                }
+                onConfirm(order.payment_method === 'cash' ? Number(paymentAmount) : undefined);
+              }}
+              disabled={order.payment_method === 'cash' && Number(paymentAmount) < order.total}
+              className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-5 h-5" />
+              Konfirmasi Pesanan
+            </button>
+          )}
+
+          {/* Tombol Selesai untuk processing orders */}
+          {onComplete && !isPending && (
             <button
               onClick={onComplete}
               className="w-full py-3 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
@@ -347,10 +475,20 @@ function OrderDetailModal({ order, onClose, onComplete, formatRupiah, formatTime
               <CheckCircle2 className="w-5 h-5" />
               Tandai Selesai
             </button>
-          ) : (
-            <div className="text-center text-sm text-gray-600">
-              <CheckCircle2 className="w-6 h-6 mx-auto mb-1 text-green-600" />
-              Pesanan Selesai
+          )}
+
+          {/* Tombol Cetak Struk */}
+          <button
+            onClick={() => onPrintOrder(order)}
+            className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Printer className="w-5 h-5" />
+            {onComplete || isPending ? 'Cetak Struk' : 'Cetak Ulang Struk'}
+          </button>
+
+          {!onComplete && !isPending && (
+            <div className="text-center text-xs text-gray-500 pt-2">
+              ✓ Pesanan Selesai
             </div>
           )}
         </div>
